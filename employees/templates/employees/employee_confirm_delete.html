@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="card shadow-sm border-danger">
+      <div class="card-header bg-danger text-white">
+        <h4 class="mb-0">Confirmar la supresión</h4>
+      </div>
+      <div class="card-body text-center">
+        <p class="fs-5">BORRAR <strong>{{ employee.name }}</strong> ?</p>
+        <p class="text-muted">También se anularán todas sus citaciones.</p>
+        <form method="post" class="d-flex gap-2 justify-content-center">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger">🗑️ Confirmar</button>
+          <a href="{% url 'employee_list' %}" class="btn btn-outline-secondary">Anular</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

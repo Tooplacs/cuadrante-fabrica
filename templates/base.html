@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cuadrante Fábrica</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f8f9fa; }
+    .navbar { background-color: #0d6e6e; }
+    .navbar-brand, .nav-link { color: white !important; }
+    .badge-TM { background-color: #ffc107; color: #000; }
+    .badge-TT { background-color: #17a2b8; color: #fff; }
+    .badge-TN { background-color: #dc3545; color: #fff; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg mb-4">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="/">🏭 Cuadrante Fábrica</a>
+      <div class="navbar-nav">
+        <a class="nav-link" href="/employees/">Empleados</a>
+        <a class="nav-link" href="/schedule/">Calendario</a>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
