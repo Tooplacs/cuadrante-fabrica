@@ -136,7 +136,7 @@ def build_excel(year, start_month=1, num_months=12):
     for day_idx in range(len(days)):
         col_code  = 2 + day_idx * 2
         col_heure = col_code + 1
-        ws2.column_dimensions[get_column_letter(col_code)].width  = 4
+        ws2.column_dimensions[get_column_letter(col_code)].width  = 8
         ws2.column_dimensions[get_column_letter(col_heure)].width = 6
 
     # Hauteurs lignes
@@ -146,20 +146,20 @@ def build_excel(year, start_month=1, num_months=12):
         ws2.row_dimensions[i].height = 18
 
     # Ligne 1 : dates
-    apply_cell(ws2, 1, 1, '', COLOR_HEADER_BG, COLOR_WHITE, bold=True, size=8)
-    apply_cell(ws2, 2, 1, '', COLOR_HEADER_BG, COLOR_WHITE, bold=True, size=8)
+    apply_cell(ws2, 1, 1, '', COLOR_WHITE, COLOR_BLACK, bold=True, size=8)
+    apply_cell(ws2, 2, 1, '', COLOR_WHITE, COLOR_BLACK, bold=True, size=8)
 
     for day_idx, day in enumerate(days):
         col_code   = 2 + day_idx * 2
         col_heure  = col_code + 1
         is_weekend = day.weekday() >= 5
-        header_bg  = 'CC0000' if is_weekend else COLOR_HEADER_BG
+        header_bg  = 'CC0000' if is_weekend else COLOR_WHITE
         label      = day.strftime('%d/%m/%Y')
 
-        apply_cell(ws2, 1, col_code,  label,   header_bg, COLOR_WHITE, bold=True, size=7)
-        apply_cell(ws2, 1, col_heure, '',       header_bg, COLOR_WHITE, bold=True, size=7)
-        apply_cell(ws2, 2, col_code,  'Turno',  header_bg, COLOR_WHITE, bold=True, size=7)
-        apply_cell(ws2, 2, col_heure, 'Hora',   header_bg, COLOR_WHITE, bold=True, size=7)
+        apply_cell(ws2, 1, col_code,  label,   header_bg, COLOR_BLACK, bold=True, size=7)
+        apply_cell(ws2, 1, col_heure, '',       header_bg, COLOR_BLACK, bold=True, size=7)
+        apply_cell(ws2, 2, col_code,  'Turno',  header_bg, COLOR_BLACK, bold=True, size=7)
+        apply_cell(ws2, 2, col_heure, 'Hora',   header_bg, COLOR_BLACK, bold=True, size=7)
 
     # Recuperer tous les quarts en une seule requete
     all_assignments = ShiftAssignment.objects.filter(year=year).select_related('employee')
@@ -169,8 +169,8 @@ def build_excel(year, start_month=1, num_months=12):
 
     # Lignes employes
     for row_idx, emp in enumerate(employees, start=3):
-        apply_cell(ws2, row_idx, 1, emp.name, COLOR_NAME_BG,
-                   COLOR_WHITE, bold=True, italic=True, align='left', size=9)
+        apply_cell(ws2, row_idx, 1, emp.name, COLOR_WHITE,
+                   COLOR_BLACK, bold=True, italic=True, align='left', size=9)
 
         for day_idx, day in enumerate(days):
             col_code   = 2 + day_idx * 2
