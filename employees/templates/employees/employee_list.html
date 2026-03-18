@@ -1,55 +1,123 @@
 {% extends 'base.html' %}
 {% block content %}
 
+<style>
+  .nav-tabs .nav-link {
+    color: black !important;
+    font-weight: bold;
+  }
+  .nav-tabs .nav-link.active {
+    color: black !important;
+    font-weight: bold;
+  }
+</style>
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2>👷 Empleados</h2>
   <a href="{% url 'employee_create' %}" class="btn btn-success">+ Añadir empleado</a>
 </div>
 
-<div class="card shadow-sm">
-  <table class="table table-hover mb-0">
-    <thead style="background-color:#0d6e6e; color:white;">
-      <tr>
-        <th>Nombre</th>
-        <th>Turnos permitidos</th>
-        <th>Estado</th>
-        <th>Acciones</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for emp in employees %}
-      <tr>
-        <td class="fw-bold fst-italic">{{ emp.name }}</td>
-        <td>
-          {% if emp.puede_TM %}
-            <span class="badge" style="background-color:#ffc107; color:#000;">TM</span>
-          {% endif %}
-          {% if emp.puede_TT %}
-            <span class="badge" style="background-color:#17a2b8; color:#fff;">TT</span>
-          {% endif %}
-          {% if emp.puede_TN %}
-            <span class="badge" style="background-color:#dc3545; color:#fff;">TN</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if emp.is_active %}
-            <span class="badge bg-success">Activo</span>
-          {% else %}
-            <span class="badge bg-secondary">Inactivo</span>
-          {% endif %}
-        </td>
-        <td>
-          <a href="{% url 'employee_edit' emp.pk %}" class="btn btn-sm btn-outline-primary">✏️ Modificar</a>
-          <a href="{% url 'employee_delete' emp.pk %}" class="btn btn-sm btn-outline-danger">🗑️ Eliminar</a>
-        </td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="4" class="text-center text-muted py-4">No hay empleados registrados.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- Onglets -->
+<ul class="nav nav-tabs mb-3" id="empTabs">
+  <li class="nav-item">
+    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#produccion" style="color:black;">
+      🏭 Producción ({{ produccion.count }})
+    </button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#acondicionamiento" style="color:black;">
+      📦 Acondicionamiento ({{ acondicionamiento.count }})
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+  <!-- Tab Produccion -->
+  <div class="tab-pane fade show active" id="produccion">
+    <div class="card shadow-sm">
+      <table class="table table-hover mb-0">
+        <thead style="background-color:#0d6e6e; color:white;">
+          <tr>
+            <th>Nombre</th>
+            <th>Turnos permitidos</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for emp in produccion %}
+          <tr>
+            <td class="fw-bold fst-italic">{{ emp.name }}</td>
+            <td>
+              {% if emp.puede_TM %}<span class="badge" style="background-color:#00B050; color:#fff;">TM</span>{% endif %}
+              {% if emp.puede_TT %}<span class="badge" style="background-color:#CCAA00; color:#fff;">TT</span>{% endif %}
+              {% if emp.puede_TN %}<span class="badge" style="background-color:#0070C0; color:#fff;">TN</span>{% endif %}
+            </td>
+            <td>
+              {% if emp.is_active %}
+                <span class="badge bg-success">Activo</span>
+              {% else %}
+                <span class="badge bg-secondary">Inactivo</span>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{% url 'employee_edit' emp.pk %}" class="btn btn-sm btn-outline-primary">✏️ Modificar</a>
+              <a href="{% url 'employee_delete' emp.pk %}" class="btn btn-sm btn-outline-danger">🗑️ Eliminar</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4" class="text-center text-muted py-4">No hay empleados en Producción.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab Acondicionamiento -->
+  <div class="tab-pane fade" id="acondicionamiento">
+    <div class="card shadow-sm">
+      <table class="table table-hover mb-0">
+        <thead style="background-color:#0d6e6e; color:white;">
+          <tr>
+            <th>Nombre</th>
+            <th>Turnos permitidos</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for emp in acondicionamiento %}
+          <tr>
+            <td class="fw-bold fst-italic">{{ emp.name }}</td>
+            <td>
+              {% if emp.puede_TM %}<span class="badge" style="background-color:#00B050; color:#fff;">TM</span>{% endif %}
+              {% if emp.puede_TT %}<span class="badge" style="background-color:#CCAA00; color:#fff;">TT</span>{% endif %}
+              {% if emp.puede_TN %}<span class="badge" style="background-color:#0070C0; color:#fff;">TN</span>{% endif %}
+            </td>
+            <td>
+              {% if emp.is_active %}
+                <span class="badge bg-success">Activo</span>
+              {% else %}
+                <span class="badge bg-secondary">Inactivo</span>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{% url 'employee_edit' emp.pk %}" class="btn btn-sm btn-outline-primary">✏️ Modificar</a>
+              <a href="{% url 'employee_delete' emp.pk %}" class="btn btn-sm btn-outline-danger">🗑️ Eliminar</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4" class="text-center text-muted py-4">No hay empleados en Acondicionamiento.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
 {% endblock %}

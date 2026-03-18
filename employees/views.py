@@ -4,8 +4,12 @@ from .forms import EmployeeForm
 
 
 def employee_list(request):
-    employees = Employee.objects.all()
-    return render(request, 'employees/employee_list.html', {'employees': employees})
+    produccion       = Employee.objects.filter(departamento='produccion')
+    acondicionamiento = Employee.objects.filter(departamento='acondicionamiento')
+    return render(request, 'employees/employee_list.html', {
+        'produccion':        produccion,
+        'acondicionamiento': acondicionamiento,
+    })
 
 
 def employee_create(request):
@@ -39,3 +43,4 @@ def employee_delete(request, pk):
     return render(request, 'employees/employee_confirm_delete.html', {
         'employee': employee,
     })
+

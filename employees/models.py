@@ -3,14 +3,20 @@ from django.db import models
 
 class Employee(models.Model):
 
+    DEPARTAMENTO_CHOICES = [
+        ('produccion',       'Producción'),
+        ('acondicionamiento', 'Acondicionamiento'),
+    ]
+
     name      = models.CharField(max_length=100)
+    departamento = models.CharField(max_length=20, choices=DEPARTAMENTO_CHOICES, default='produccion')
     puede_TM  = models.BooleanField(default=True, verbose_name='TM')
     puede_TT  = models.BooleanField(default=True, verbose_name='TT')
     puede_TN  = models.BooleanField(default=True, verbose_name='TN')
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        ordering = ['name']
+        ordering = ['departamento', 'name']
 
     def __str__(self):
         return self.name
