@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<style>
+  .nav-tabs .nav-link { color: black !important; font-weight: bold; }
+  .nav-tabs .nav-link.active { color: black !important; font-weight: bold; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2>📦 Cuadrante — Acondicionamiento</h2>
+  <div class="d-flex gap-2">
+    <a href="{% url 'calendar_view' %}" class="btn btn-outline-secondary">🏭 Ver Producción</a>
+    <a href="{% url 'employee_list' %}" class="btn btn-outline-secondary">👷 Empleados</a>
+  </div>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header" style="background-color:#0d6e6e; color:black; font-weight:bold;">
+    <h5 class="mb-0">Gestión del cuadrante — Acondicionamiento</h5>
+  </div>
+  <div class="card-body">
+    <form method="post" action="{% url 'generate_schedule_acondicionamiento' %}">
+      {% csrf_token %}
+      <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Año</label>
+          <input type="number" name="year" id="year-input" class="form-control"
+                 value="{{ start_year }}" min="2020" max="2099">
+        </div>
+        <div class="col-md-4">
+          <button type="submit" class="btn btn-success w-100">⚡ Generar año completo</button>
+        </div>
+        <div class="col-md-4">
+          <a id="btn-export" href="/export/?year={{ start_year }}&departamento=acondicionamiento"
+             class="btn btn-primary w-100">📥 Exportar Excel</a>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.getElementById('year-input').addEventListener('input', function() {
+  document.getElementById('btn-export').href = '/export/?year=' + this.value + '&departamento=acondicionamiento';
+});
+</script>
+
+{% if period %}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-bordered table-sm mb-0 text-center">
+      <thead>
+        <tr>
+          <th style="background-color:#0d6e6e; color:black; font-weight:bold; min-width:150px;">Empleado</th>
+          {% for month_data in period %}
+            <th style="background-color:#0d6e6e; color:black; font-weight:bold;">{{ month_data.label }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for employee in employees %}
+        <tr>
+          <td class="fw-bold fst-italic text-start ps-3">{{ employee.name }}</td>
+          {% for month_data in period %}
+            {% for assignment in month_data.assignments %}
+              {% if assignment.employee.id == employee.id %}
+                <td style="
+                  {% if assignment.shift == 'TM' %}background-color:#fff3cd; color:#000;
+                  {% elif assignment.shift == 'TT' %}background-color:#cff4fc; color:#000;
+                  {% elif assignment.shift == 'TN' %}background-color:#f8d7da; color:#000;
+                  {% endif %}
+                  font-weight:bold; cursor:pointer;"
+                  title="Clic para editar"
+                  onclick="editarTurno({{ assignment.pk }}, '{{ assignment.shift }}', '{{ employee.name }}', '{{ month_data.label }}')">
+                  {{ assignment.shift }}{% if assignment.is_manual %} *{% endif %}
+                </td>
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+
+        <tr>
+          <td class="fw-bold" style="background-color:#fff3cd;">TM</td>
+          {% for month_data in period %}
+            <td style="background-color:#fff3cd; font-weight:bold;">{{ month_data.counts.TM }}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td class="fw-bold" style="background-color:#cff4fc;">TT</td>
+          {% for month_data in period %}
+            <td style="background-color:#cff4fc; font-weight:bold;">{{ month_data.counts.TT }}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td class="fw-bold" style="background-color:#f8d7da;">TN</td>
+          {% for month_data in period %}
+            <td style="background-color:#f8d7da; font-weight:bold;">{{ month_data.counts.TN }}</td>
+          {% endfor %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Modal édition -->
+<div class="modal fade" id="modalEditar" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header" style="background-color:#0d6e6e; color:black;">
+        <h5 class="modal-title fw-bold">Editar turno</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p id="modal-info" class="text-muted small"></p>
+        <form method="post" id="form-editar">
+          {% csrf_token %}
+          <div class="d-grid gap-2">
+            <button type="submit" name="shift" value="TM"
+              class="btn fw-bold" style="background-color:#fff3cd;">TM — Mañana</button>
+            <button type="submit" name="shift" value="TT"
+              class="btn fw-bold" style="background-color:#cff4fc;">TT — Tarde</button>
+            <button type="submit" name="shift" value="TN"
+              class="btn fw-bold" style="background-color:#f8d7da;">TN — Noche</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function editarTurno(pk, turno, nombre, mes) {
+  document.getElementById('form-editar').action = '/schedule/edit/' + pk + '/';
+  document.getElementById('modal-info').textContent = nombre + ' — ' + mes + ' (actual: ' + turno + ')';
+  new bootstrap.Modal(document.getElementById('modalEditar')).show();
+}
+</script>
+
+{% endblock %}

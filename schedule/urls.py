@@ -5,4 +5,5 @@ urlpatterns = [
     path('',             views.calendar_view,   name='calendar_view'),
     path('generate/',    views.generate_view,   name='generate_schedule'),
     path('edit/<int:pk>/', views.edit_assignment, name='edit_assignment'),
+    path('acondicionamiento/',  views.calendar_acondicionamiento, name='calendar_acondicionamiento'),
 ]

@@ -9,15 +9,14 @@ import datetime
 def calendar_view(request):
     today      = datetime.date.today()
     start_year = int(request.GET.get('start_year', today.year))
-
-    employees = Employee.objects.filter(is_active=True)
-    period    = get_schedule_for_period(start_year, 1, 12)
-
+    employees  = Employee.objects.filter(is_active=True, departamento='produccion')
+    period     = get_schedule_for_period(start_year, 1, 12, departamento='produccion')
     return render(request, 'schedule/calendar_view.html', {
-        'employees':   employees,
-        'period':      period,
-        'start_year':  start_year,
+        'employees':  employees,
+        'period':     period,
+        'start_year': start_year,
     })
+
 
 
 def generate_view(request):
@@ -47,3 +46,30 @@ def edit_assignment(request, pk):
             assignment.save()
             messages.success(request, 'Turno actualizado.')
     return redirect('calendar_view')
+
+def calendar_acondicionamiento(request):
+    today      = datetime.date.today()
+    start_year = int(request.GET.get('start_year', today.year))
+    employees  = Employee.objects.filter(is_active=True, departamento='acondicionamiento')
+    period     = get_schedule_for_period(start_year, 1, 12, departamento='acondicionamiento')
+    return render(request, 'schedule/calendar_acondicionamiento.html', {
+        'employees':  employees,
+        'period':     period,
+        'start_year': start_year,
+    })
+
+def generate_acondicionamiento_view(request):
+    if request.method == 'POST':
+        try:
+            year = int(request.POST.get('year', ''))
+        except (ValueError, TypeError):
+            year = datetime.date.today().year
+
+        try:
+            from .scheduler import generate_schedule_acondicionamiento
+            generate_schedule_acondicionamiento(year)
+            messages.success(request, f'Cuadrante Acondicionamiento generado para {year}.')
+        except Exception as e:
+            messages.error(request, f'Error al generar: {str(e)}')
+        return redirect(f'/schedule/acondicionamiento/?start_year={year}')
+    return redirect('calendar_acondicionamiento')
