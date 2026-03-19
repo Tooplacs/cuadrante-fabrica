@@ -25,13 +25,26 @@ def employee_create(request):
 
 def employee_edit(request, pk):
     employee = get_object_or_404(Employee, pk=pk)
+    old_en_baja    = employee.en_baja
+    old_baja_inicio = employee.baja_inicio
     form = EmployeeForm(request.POST or None, instance=employee)
     if form.is_valid():
         form.save()
+        employee.refresh_from_db()
+        # Si en_baja a changé ou dates modifiées → régénérer depuis baja_inicio
+        if employee.en_baja and employee.baja_inicio:
+            from schedule.scheduler import generate_schedule_with_ai, generate_schedule_acondicionamiento
+            import datetime
+            year        = employee.baja_inicio.year
+            start_month = employee.baja_inicio.month
+            if employee.departamento == 'produccion':
+                generate_schedule_with_ai(year, start_month=start_month)
+            else:
+                generate_schedule_acondicionamiento(year, start_month=start_month)
         return redirect('employee_list')
     return render(request, 'employees/employee_form.html', {
         'form':  form,
-        'title': f'Modifier - {employee.name}',
+        'title': f'Modificar - {employee.name}',
     })
 
 
