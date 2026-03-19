@@ -1,19 +1,21 @@
 from django.db import models
 from employees.models import Employee
 
+
 class ShiftAssignment(models.Model):
 
     SHIFT_CHOICES = [
         ('TM', 'Matin'),
         ('TT', 'Après-midi'),
         ('TN', 'Nuit'),
+        ('BJ', 'Baja'),
     ]
 
-    employee   = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='assignments')
-    year       = models.IntegerField()
-    month      = models.IntegerField()  # 1 à 12
-    shift      = models.CharField(max_length=2, choices=SHIFT_CHOICES)
-    is_manual  = models.BooleanField(default=False)  # True = saisi manuellement
+    employee  = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='assignments')
+    year      = models.IntegerField()
+    month     = models.IntegerField()
+    shift     = models.CharField(max_length=2, choices=SHIFT_CHOICES)
+    is_manual = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ('employee', 'year', 'month')
@@ -24,7 +26,6 @@ class ShiftAssignment(models.Model):
 
     @property
     def month_label(self):
-        """Ex: 'May-25'"""
         import calendar
         abbr = calendar.month_abbr[self.month]
         return f"{abbr}-{str(self.year)[2:]}"

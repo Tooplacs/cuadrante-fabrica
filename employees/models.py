@@ -8,13 +8,14 @@ class Employee(models.Model):
         ('acondicionamiento', 'Acondicionamiento'),
     ]
 
-    name         = models.CharField(max_length=100)
-    departamento = models.CharField(max_length=20, choices=DEPARTAMENTO_CHOICES, default='produccion')
-    puede_TM     = models.BooleanField(default=True, verbose_name='TM')
-    puede_TT     = models.BooleanField(default=True, verbose_name='TT')
-    puede_TN     = models.BooleanField(default=True, verbose_name='TN')
-    is_active    = models.BooleanField(default=True)
-    en_baja      = models.BooleanField(default=False, verbose_name='En arrêt maladie')
+    name           = models.CharField(max_length=100)
+    departamento   = models.CharField(max_length=20, choices=DEPARTAMENTO_CHOICES, default='produccion')
+    puede_TM       = models.BooleanField(default=True, verbose_name='TM')
+    puede_TT       = models.BooleanField(default=True, verbose_name='TT')
+    puede_TN       = models.BooleanField(default=True, verbose_name='TN')
+    en_baja        = models.BooleanField(default=False, verbose_name='En baja')
+    baja_inicio    = models.DateField(null=True, blank=True, verbose_name='Inicio baja')
+    baja_fin       = models.DateField(null=True, blank=True, verbose_name='Fin baja')
 
     class Meta:
         ordering = ['departamento', 'name']

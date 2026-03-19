@@ -1,6 +1,7 @@
 from .models import ShiftAssignment
 from employees.models import Employee
 import random
+from datetime import date
 
 ALL_SHIFTS = ['TM', 'TT', 'TN']
 
@@ -30,45 +31,61 @@ def get_opposite(shift):
     return None
 
 
+def is_employee_en_baja_for_month(emp, year, month):
+    """Retourne True si l'employé est en baja pour ce mois précis."""
+    if not emp.en_baja:
+        return False
+    # Si pas de dates définies, toute l'année est en baja
+    if not emp.baja_inicio or not emp.baja_fin:
+        return True
+    mois_date  = date(year, month, 1)
+    baja_debut = emp.baja_inicio.replace(day=1)
+    baja_fin   = emp.baja_fin.replace(day=1)
+    return baja_debut <= mois_date <= baja_fin
+
+
 def generate_schedule_with_ai(year, start_month=1):
-    # Exclure les employés en baja
-    employees = list(Employee.objects.filter(
-        is_active=True, departamento='produccion', en_baja=False
-    ))
-    if not employees:
+    # Tous les employés du département, y compris en baja pour affichage
+    all_employees = list(Employee.objects.filter(departamento='produccion'))
+    # Seulement les actifs (non en baja) pour la génération
+    active_employees = all_employees[:]
+
+    if not all_employees:
         return {}
 
-    # Supprimer uniquement les mois à partir de start_month (sauf manuels)
+    # Supprimer TOUS les assignments non-manuels de l'année
     ShiftAssignment.objects.filter(
         year=year,
-        month__gte=start_month,
         employee__departamento='produccion',
         is_manual=False,
     ).delete()
 
-    fixed_emps = [e for e in employees if len(e.allowed_shifts()) == 1]
-    free_emps  = [e for e in employees if len(e.allowed_shifts()) > 1]
+    # Récupérer les manuels existants
+    manuels = {
+        (a.employee_id, a.month): a.shift
+        for a in ShiftAssignment.objects.filter(
+            year=year,
+            employee__departamento='produccion',
+            is_manual=True,
+        )
+    }
 
-    if not free_emps:
-        for month in range(start_month, 13):
-            for emp in fixed_emps:
-                ShiftAssignment.objects.get_or_create(
-                    employee=emp, year=year, month=month,
-                    defaults={'shift': emp.allowed_shifts()[0], 'is_manual': False},
-                )
-        return {}
+    fixed_emps = [e for e in active_employees if len(e.allowed_shifts()) == 1]
+    free_emps  = [e for e in active_employees if len(e.allowed_shifts()) > 1]
 
     tn_eligible = [e for e in free_emps if 'TN' in e.allowed_shifts()]
     if not tn_eligible:
-        tn_eligible = free_emps[:]
+        tn_eligible = free_emps[:] if free_emps else []
 
-    # Compteur TN en mémoire
     tn_counts = {emp.id: 0 for emp in tn_eligible}
 
-    # Récupérer le turno du mois précédant start_month
+    # Lire le turno réel du mois précédant start_month depuis la DB
     prev_year  = year - 1 if start_month == 1 else year
     prev_month = 12       if start_month == 1 else start_month - 1
-    prev_shifts = {emp.id: get_previous_shift(emp, prev_year, prev_month) for emp in employees}
+    prev_shifts = {
+        emp.id: get_previous_shift(emp, prev_year, prev_month)
+        for emp in active_employees
+    }
 
     free_order = free_emps[:]
     random.shuffle(free_order)
@@ -76,28 +93,38 @@ def generate_schedule_with_ai(year, start_month=1):
     for month in range(start_month, 13):
         assignments = {}
 
+        # Employés actifs ce mois (hors baja)
+        active_this_month = [
+            e for e in active_employees
+            if not is_employee_en_baja_for_month(e, year, month)
+        ]
+        fixed_this_month = [e for e in fixed_emps if e in active_this_month]
+        free_this_month  = [e for e in free_order  if e in active_this_month]
+
         # 1. Fixes
-        for emp in fixed_emps:
+        for emp in fixed_this_month:
             assignments[emp.id] = emp.allowed_shifts()[0]
 
-        # 2. TN — 1 par mois obligatoire, jamais 2 mois de suite
-        tn_sorted = sorted(tn_eligible, key=lambda e: tn_counts[e.id])
-        tn_emp    = None
-        for candidate in tn_sorted:
-            if prev_shifts.get(candidate.id) != 'TN':
-                tn_emp = candidate
-                break
-        if tn_emp is None:
-            tn_emp = tn_sorted[0]
-        assignments[tn_emp.id] = 'TN'
-        tn_counts[tn_emp.id] += 1
+        # 2. TN — 1 par mois obligatoire si assez d'employés libres
+        tn_eligible_this_month = [e for e in tn_eligible if e in active_this_month]
+        if tn_eligible_this_month:
+            tn_sorted = sorted(tn_eligible_this_month, key=lambda e: tn_counts[e.id])
+            tn_emp    = None
+            for candidate in tn_sorted:
+                if prev_shifts.get(candidate.id) != 'TN':
+                    tn_emp = candidate
+                    break
+            if tn_emp is None:
+                tn_emp = tn_sorted[0]
+            assignments[tn_emp.id] = 'TN'
+            tn_counts[tn_emp.id] += 1
 
-        # 3. Quotas TM/TT — alternance sur le TOTAL (fixes + libres hors TN)
-        remaining        = [e for e in free_order if e.id not in assignments]
+        # 3. Quotas TM/TT — alternance sur le TOTAL actif ce mois
+        remaining        = [e for e in free_this_month if e.id not in assignments]
         n_remaining      = len(remaining)
-        n_fixed_tm       = sum(1 for emp in fixed_emps if assignments.get(emp.id) == 'TM')
-        n_fixed_tt       = sum(1 for emp in fixed_emps if assignments.get(emp.id) == 'TT')
-        total_emps_no_tn = len(fixed_emps) + n_remaining
+        n_fixed_tm       = sum(1 for emp in fixed_this_month if assignments.get(emp.id) == 'TM')
+        n_fixed_tt       = sum(1 for emp in fixed_this_month if assignments.get(emp.id) == 'TT')
+        total_emps_no_tn = len(fixed_this_month) + n_remaining
 
         if month % 2 == 1:
             target_tm = (total_emps_no_tn + 1) // 2
@@ -149,56 +176,79 @@ def generate_schedule_with_ai(year, start_month=1):
             else:
                 assignments[emp.id] = non_tn[0] if non_tn else allowed[0]
 
-        # Sauvegarder
-        for emp in employees:
-            if emp.id in assignments:
-                ShiftAssignment.objects.get_or_create(
+        # Sauvegarder — tous les employés du département
+        for emp in all_employees:
+            manuel = manuels.get((emp.id, month))
+            if manuel:
+                # Garder le manuel
+                assignments[emp.id] = manuel
+                ShiftAssignment.objects.update_or_create(
+                    employee=emp, year=year, month=month,
+                    defaults={'shift': manuel, 'is_manual': True},
+                )
+            elif emp.id in assignments:
+                ShiftAssignment.objects.update_or_create(
                     employee=emp, year=year, month=month,
                     defaults={'shift': assignments[emp.id], 'is_manual': False},
                 )
+            else:
+                # Employé en baja ce mois — créer un assignment BJ pour affichage
+                ShiftAssignment.objects.update_or_create(
+                    employee=emp, year=year, month=month,
+                    defaults={'shift': 'BJ', 'is_manual': False},
+                )
+                assignments[emp.id] = 'BJ'
 
-        prev_shifts = {emp.id: assignments.get(emp.id) for emp in employees}
+        # prev_shifts — garder le dernier shift non-BJ connu
+        new_prev = {}
+        for emp in active_employees:
+            shift = assignments.get(emp.id)
+            if shift and shift != 'BJ':
+                new_prev[emp.id] = shift
+            else:
+                new_prev[emp.id] = prev_shifts.get(emp.id)
+        prev_shifts = new_prev
 
     return {}
 
 
 def generate_schedule_acondicionamiento(year, start_month=1):
-    # Exclure les employés en baja
-    employees = list(Employee.objects.filter(
-        is_active=True, departamento='acondicionamiento', en_baja=False
-    ))
-    if not employees:
+    all_employees    = list(Employee.objects.filter(departamento='acondicionamiento'))
+    active_employees = all_employees[:]
+
+    if not all_employees:
         return {}
 
-    # Supprimer uniquement les mois à partir de start_month (sauf manuels)
     ShiftAssignment.objects.filter(
         year=year,
-        month__gte=start_month,
         employee__departamento='acondicionamiento',
         is_manual=False,
     ).delete()
 
-    fixed_emps = [e for e in employees if len(e.allowed_shifts()) == 1]
-    free_emps  = [e for e in employees if len(e.allowed_shifts()) > 1]
+    manuels = {
+        (a.employee_id, a.month): a.shift
+        for a in ShiftAssignment.objects.filter(
+            year=year,
+            employee__departamento='acondicionamiento',
+            is_manual=True,
+        )
+    }
 
-    if not free_emps:
-        for month in range(start_month, 13):
-            for emp in fixed_emps:
-                ShiftAssignment.objects.get_or_create(
-                    employee=emp, year=year, month=month,
-                    defaults={'shift': emp.allowed_shifts()[0], 'is_manual': False},
-                )
-        return {}
+    fixed_emps = [e for e in active_employees if len(e.allowed_shifts()) == 1]
+    free_emps  = [e for e in active_employees if len(e.allowed_shifts()) > 1]
 
     tn_eligible = [e for e in free_emps if 'TN' in e.allowed_shifts()]
     if not tn_eligible:
-        tn_eligible = free_emps[:]
+        tn_eligible = free_emps[:] if free_emps else []
 
     tn_counts = {emp.id: 0 for emp in tn_eligible}
 
     prev_year  = year - 1 if start_month == 1 else year
     prev_month = 12       if start_month == 1 else start_month - 1
-    prev_shifts = {emp.id: get_previous_shift(emp, prev_year, prev_month) for emp in employees}
+    prev_shifts = {
+        emp.id: get_previous_shift(emp, prev_year, prev_month)
+        for emp in active_employees
+    }
 
     free_order = free_emps[:]
     random.shuffle(free_order)
@@ -206,28 +256,34 @@ def generate_schedule_acondicionamiento(year, start_month=1):
     for month in range(start_month, 13):
         assignments = {}
 
-        # 1. Fixes
-        for emp in fixed_emps:
+        active_this_month = [
+            e for e in active_employees
+            if not is_employee_en_baja_for_month(e, year, month)
+        ]
+        fixed_this_month = [e for e in fixed_emps if e in active_this_month]
+        free_this_month  = [e for e in free_order  if e in active_this_month]
+
+        for emp in fixed_this_month:
             assignments[emp.id] = emp.allowed_shifts()[0]
 
-        # 2. TN — 1 par mois obligatoire, jamais 2 mois de suite
-        tn_sorted = sorted(tn_eligible, key=lambda e: tn_counts[e.id])
-        tn_emp    = None
-        for candidate in tn_sorted:
-            if prev_shifts.get(candidate.id) != 'TN':
-                tn_emp = candidate
-                break
-        if tn_emp is None:
-            tn_emp = tn_sorted[0]
-        assignments[tn_emp.id] = 'TN'
-        tn_counts[tn_emp.id] += 1
+        tn_eligible_this_month = [e for e in tn_eligible if e in active_this_month]
+        if tn_eligible_this_month:
+            tn_sorted = sorted(tn_eligible_this_month, key=lambda e: tn_counts[e.id])
+            tn_emp    = None
+            for candidate in tn_sorted:
+                if prev_shifts.get(candidate.id) != 'TN':
+                    tn_emp = candidate
+                    break
+            if tn_emp is None:
+                tn_emp = tn_sorted[0]
+            assignments[tn_emp.id] = 'TN'
+            tn_counts[tn_emp.id] += 1
 
-        # 3. Quotas TM/TT — alternance sur le TOTAL
-        remaining        = [e for e in free_order if e.id not in assignments]
+        remaining        = [e for e in free_this_month if e.id not in assignments]
         n_remaining      = len(remaining)
-        n_fixed_tm       = sum(1 for emp in fixed_emps if assignments.get(emp.id) == 'TM')
-        n_fixed_tt       = sum(1 for emp in fixed_emps if assignments.get(emp.id) == 'TT')
-        total_emps_no_tn = len(fixed_emps) + n_remaining
+        n_fixed_tm       = sum(1 for emp in fixed_this_month if assignments.get(emp.id) == 'TM')
+        n_fixed_tt       = sum(1 for emp in fixed_this_month if assignments.get(emp.id) == 'TT')
+        total_emps_no_tn = len(fixed_this_month) + n_remaining
 
         if month % 2 == 1:
             target_tm = (total_emps_no_tn + 1) // 2
@@ -239,7 +295,6 @@ def generate_schedule_acondicionamiento(year, start_month=1):
         n_tm_need = max(0, target_tm - n_fixed_tm)
         n_tt_need = max(0, target_tt - n_fixed_tt)
 
-        # 4. TM/TT — alternance individuelle forcée
         must_change = []
         can_choose  = []
 
@@ -279,20 +334,41 @@ def generate_schedule_acondicionamiento(year, start_month=1):
             else:
                 assignments[emp.id] = non_tn[0] if non_tn else allowed[0]
 
-        for emp in employees:
-            if emp.id in assignments:
-                ShiftAssignment.objects.get_or_create(
+        for emp in all_employees:
+            manuel = manuels.get((emp.id, month))
+            if manuel:
+                assignments[emp.id] = manuel
+                ShiftAssignment.objects.update_or_create(
+                    employee=emp, year=year, month=month,
+                    defaults={'shift': manuel, 'is_manual': True},
+                )
+            elif emp.id in assignments:
+                ShiftAssignment.objects.update_or_create(
                     employee=emp, year=year, month=month,
                     defaults={'shift': assignments[emp.id], 'is_manual': False},
                 )
+            else:
+                ShiftAssignment.objects.update_or_create(
+                    employee=emp, year=year, month=month,
+                    defaults={'shift': 'BJ', 'is_manual': False},
+                )
+                assignments[emp.id] = 'BJ'
 
-        prev_shifts = {emp.id: assignments.get(emp.id) for emp in employees}
+        # prev_shifts — garder le dernier shift non-BJ connu
+        new_prev = {}
+        for emp in active_employees:
+            shift = assignments.get(emp.id)
+            if shift and shift != 'BJ':
+                new_prev[emp.id] = shift
+            else:
+                new_prev[emp.id] = prev_shifts.get(emp.id)
+        prev_shifts = new_prev
 
     return {}
 
 
 def generate_schedule(year, month, overwrite=False):
-    employees = list(Employee.objects.filter(is_active=True, en_baja=False))
+    employees = list(Employee.objects.filter(en_baja=False))
 
     for emp in employees:
         existing = ShiftAssignment.objects.filter(
@@ -381,7 +457,6 @@ def get_schedule_for_period(start_year, start_month, num_months, departamento=No
         if not qs.exists():
             generate_schedule(year, month)
 
-        # Inclure tous les employés du département (même en_baja pour affichage gris)
         assignments = ShiftAssignment.objects.filter(
             year=year, month=month
         ).select_related('employee')
@@ -389,9 +464,22 @@ def get_schedule_for_period(start_year, start_month, num_months, departamento=No
         if departamento:
             assignments = assignments.filter(employee__departamento=departamento)
 
+        # Annoter chaque assignment avec is_baja_mois
+        mois_date = date(year, month, 1)
+        for a in assignments:
+            emp = a.employee
+            if a.shift == 'BJ':
+                a.is_baja_mois = True
+            elif emp.en_baja and emp.baja_inicio and emp.baja_fin:
+                baja_debut     = emp.baja_inicio.replace(day=1)
+                baja_fin_date  = emp.baja_fin.replace(day=1)
+                a.is_baja_mois = (baja_debut <= mois_date <= baja_fin_date)
+            else:
+                a.is_baja_mois = False
+
         counts = {'TM': 0, 'TT': 0, 'TN': 0}
         for a in assignments:
-            if not a.employee.en_baja:
+            if not a.is_baja_mois and a.shift in counts:
                 counts[a.shift] += 1
 
         abbr  = calendar.month_abbr[month]

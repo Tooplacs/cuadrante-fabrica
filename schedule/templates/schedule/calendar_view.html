@@ -84,16 +84,14 @@ document.getElementById('year-input').addEventListener('input', function() {
         {% for employee in employees %}
         <tr>
           <td class="fw-bold fst-italic text-start ps-3"
-              {% if employee.en_baja %}style="color:#999; text-decoration:line-through;"{% endif %}>
+              {% if employee.en_baja %}style="color:#999;"{% endif %}>
             {{ employee.name }}{% if employee.en_baja %} 🤒{% endif %}
           </td>
           {% for month_data in period %}
             {% for assignment in month_data.assignments %}
               {% if assignment.employee.id == employee.id %}
-                {% if employee.en_baja %}
-                  <td style="background-color:#e0e0e0; color:#999; font-weight:bold;">
-                    —
-                  </td>
+                {% if assignment.is_baja_mois %}
+                  <td style="background-color:#e0e0e0; color:#999; font-weight:bold;">—</td>
                 {% else %}
                   <td style="
                     {% if assignment.shift == 'TM' %}background-color:#fff3cd; color:#000;

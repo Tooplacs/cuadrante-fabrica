@@ -10,45 +10,62 @@
       <div class="card-body">
         <form method="post">
           {% csrf_token %}
+
           <div class="mb-3">
             <label class="form-label fw-bold">Nombre y apellido</label>
             {{ form.name }}
           </div>
+
           <div class="mb-3">
             <label class="form-label fw-bold">Departamento</label>
-            {{ form.department }}
+            {{ form.departamento }}
           </div>
+
           <div class="mb-3">
             <label class="form-label fw-bold d-block">Turnos permitidos</label>
             <div class="d-flex gap-4 mt-2">
               <div class="form-check">
                 {{ form.puede_TM }}
                 <label class="form-check-label">
-                  <span class="badge" style="background-color:#ffc107; color:#000;">TM</span>
-                  Mañana
+                  <span class="badge" style="background-color:#ffc107; color:#000;">TM</span> Mañana
                 </label>
               </div>
               <div class="form-check">
                 {{ form.puede_TT }}
                 <label class="form-check-label">
-                  <span class="badge" style="background-color:#17a2b8; color:#fff;">TT</span>
-                  Tarde
+                  <span class="badge" style="background-color:#17a2b8; color:#fff;">TT</span> Tarde
                 </label>
               </div>
               <div class="form-check">
                 {{ form.puede_TN }}
                 <label class="form-check-label">
-                  <span class="badge" style="background-color:#dc3545; color:#fff;">TN</span>
-                  Noche
+                  <span class="badge" style="background-color:#dc3545; color:#fff;">TN</span> Noche
                 </label>
               </div>
             </div>
           </div>
-          <div class="mb-3 form-check">
-            {{ form.is_active }}
-            <label class="form-check-label">Empleado activo</label>
+
+          <div class="mb-3">
+            <label class="form-label fw-bold">Estado</label>
+            <select name="estado" class="form-select" id="estado-select">
+              <option value="activo" {% if not form.instance.en_baja %}selected{% endif %}>✅ Activo</option>
+              <option value="baja"   {% if form.instance.en_baja %}selected{% endif %}>🤒 En baja</option>
+            </select>
+            <div style="display:none;">{{ form.en_baja }}</div>
           </div>
-          <div class="d-flex gap-2">
+
+          <div id="baja-fechas" style="display:{% if form.instance.en_baja %}block{% else %}none{% endif %};">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Inicio de la baja</label>
+              {{ form.baja_inicio }}
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Fin previsto de la baja</label>
+              {{ form.baja_fin }}
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 mt-4">
             <button type="submit" class="btn btn-success">💾 Guardar</button>
             <a href="{% url 'employee_list' %}" class="btn btn-outline-secondary">Cancelar</a>
           </div>
@@ -57,5 +74,15 @@
     </div>
   </div>
 </div>
+
+<script>
+function syncEstado() {
+  const val = document.getElementById('estado-select').value;
+  document.querySelector('[name="en_baja"]').checked = (val === 'baja');
+  document.getElementById('baja-fechas').style.display = (val === 'baja') ? 'block' : 'none';
+}
+document.getElementById('estado-select').addEventListener('change', syncEstado);
+syncEstado();
+</script>
 
 {% endblock %}

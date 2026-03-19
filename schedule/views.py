@@ -10,14 +10,29 @@ def calendar_view(request):
     today       = datetime.date.today()
     start_year  = int(request.GET.get('start_year', today.year))
     start_month = int(request.GET.get('start_month', today.month))
-    employees   = Employee.objects.filter(is_active=True, departamento='produccion')
+    employees   = Employee.objects.filter(departamento='produccion')
     period      = get_schedule_for_period(start_year, 1, 12, departamento='produccion')
+
+    # Calculer les mois en baja pour chaque employé
+    baja_months = {}
+    for emp in employees:
+        baja_months[emp.id] = set()
+        if emp.en_baja and emp.baja_inicio and emp.baja_fin:
+            d = emp.baja_inicio.replace(day=1)
+            while d <= emp.baja_fin:
+                baja_months[emp.id].add((d.year, d.month))
+                if d.month == 12:
+                    d = d.replace(year=d.year + 1, month=1)
+                else:
+                    d = d.replace(month=d.month + 1)
+
     return render(request, 'schedule/calendar_view.html', {
         'employees':   employees,
         'period':      period,
         'start_year':  start_year,
         'start_month': start_month,
         'today':       today,
+        'baja_months': baja_months,
     })
 
 
@@ -25,7 +40,7 @@ def calendar_acondicionamiento(request):
     today       = datetime.date.today()
     start_year  = int(request.GET.get('start_year', today.year))
     start_month = int(request.GET.get('start_month', today.month))
-    employees   = Employee.objects.filter(is_active=True, departamento='acondicionamiento')
+    employees   = Employee.objects.filter(departamento='acondicionamiento')
     period      = get_schedule_for_period(start_year, 1, 12, departamento='acondicionamiento')
     return render(request, 'schedule/calendar_acondicionamiento.html', {
         'employees':   employees,
