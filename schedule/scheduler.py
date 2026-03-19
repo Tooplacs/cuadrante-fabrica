@@ -42,6 +42,23 @@ def is_employee_en_baja_for_month(emp, year, month):
     return baja_debut <= mois_date <= baja_fin
 
 
+def get_last_real_shift(emp, year, month):
+    """Retourne le dernier shift réel (non BJ) avant ce mois."""
+    y, m = year, month
+    for _ in range(24):
+        if m == 1:
+            y, m = y - 1, 12
+        else:
+            m -= 1
+        try:
+            a = ShiftAssignment.objects.get(employee=emp, year=y, month=m)
+            if a.shift not in ('BJ', None):
+                return a.shift
+        except ShiftAssignment.DoesNotExist:
+            pass
+    return None
+
+
 def generate_schedule_with_ai(year, start_month=1):
     all_employees    = list(Employee.objects.filter(departamento='produccion'))
     active_employees = all_employees[:]
@@ -49,7 +66,6 @@ def generate_schedule_with_ai(year, start_month=1):
     if not all_employees:
         return {}
 
-    # Supprimer les assignments non-manuels à partir de start_month
     ShiftAssignment.objects.filter(
         year=year,
         month__gte=start_month,
@@ -57,7 +73,6 @@ def generate_schedule_with_ai(year, start_month=1):
         is_manual=False,
     ).delete()
 
-    # Récupérer les manuels existants
     manuels = {
         (a.employee_id, a.month): a.shift
         for a in ShiftAssignment.objects.filter(
@@ -76,13 +91,10 @@ def generate_schedule_with_ai(year, start_month=1):
 
     tn_counts = {emp.id: 0 for emp in tn_eligible}
 
-    # Lire le turno réel du mois précédant start_month depuis la DB
-    prev_year  = year - 1 if start_month == 1 else year
-    prev_month = 12       if start_month == 1 else start_month - 1
-    prev_shifts = {
-        emp.id: get_previous_shift(emp, prev_year, prev_month)
-        for emp in active_employees
-    }
+    # Initialiser prev_shifts avec le dernier shift réel (non BJ)
+    prev_shifts = {}
+    for emp in active_employees:
+        prev_shifts[emp.id] = get_last_real_shift(emp, year, start_month)
 
     free_order = free_emps[:]
     random.shuffle(free_order)
@@ -94,8 +106,8 @@ def generate_schedule_with_ai(year, start_month=1):
             e for e in active_employees
             if not is_employee_en_baja_for_month(e, year, month)
         ]
-        fixed_this_month = [e for e in fixed_emps  if e in active_this_month]
-        free_this_month  = [e for e in free_order   if e in active_this_month]
+        fixed_this_month = [e for e in fixed_emps if e in active_this_month]
+        free_this_month  = [e for e in free_order  if e in active_this_month]
 
         # 1. Fixes
         for emp in fixed_this_month:
@@ -132,7 +144,7 @@ def generate_schedule_with_ai(year, start_month=1):
         n_tm_need = max(0, target_tm - n_fixed_tm)
         n_tt_need = max(0, target_tt - n_fixed_tt)
 
-        # 4. TM/TT — alternance individuelle forcée
+        # 4. TM/TT — alternance individuelle PRIORITAIRE sur les quotas
         must_change = []
         can_choose  = []
 
@@ -150,24 +162,25 @@ def generate_schedule_with_ai(year, start_month=1):
         random.shuffle(can_choose)
         tm_count = tt_count = 0
 
+        # must_change : forcer l'alternance sans condition de quota
         for emp, forced_shift in must_change:
-            if forced_shift == 'TM' and tm_count < n_tm_need:
-                assignments[emp.id] = 'TM'; tm_count += 1
-            elif forced_shift == 'TT' and tt_count < n_tt_need:
-                assignments[emp.id] = 'TT'; tt_count += 1
-            elif forced_shift == 'TM' and 'TT' in emp.allowed_shifts():
-                assignments[emp.id] = 'TT'; tt_count += 1
-            elif forced_shift == 'TT' and 'TM' in emp.allowed_shifts():
-                assignments[emp.id] = 'TM'; tm_count += 1
-            else:
-                assignments[emp.id] = forced_shift
+            assignments[emp.id] = forced_shift
+            if forced_shift == 'TM':
+                tm_count += 1
+            elif forced_shift == 'TT':
+                tt_count += 1
 
+        # can_choose : remplir avec les quotas restants
         for emp in can_choose:
             allowed = emp.allowed_shifts()
             non_tn  = [s for s in allowed if s != 'TN']
             if tm_count < n_tm_need and 'TM' in non_tn:
                 assignments[emp.id] = 'TM'; tm_count += 1
             elif tt_count < n_tt_need and 'TT' in non_tn:
+                assignments[emp.id] = 'TT'; tt_count += 1
+            elif 'TM' in non_tn:
+                assignments[emp.id] = 'TM'; tm_count += 1
+            elif 'TT' in non_tn:
                 assignments[emp.id] = 'TT'; tt_count += 1
             else:
                 assignments[emp.id] = non_tn[0] if non_tn else allowed[0]
@@ -187,14 +200,13 @@ def generate_schedule_with_ai(year, start_month=1):
                     defaults={'shift': assignments[emp.id], 'is_manual': False},
                 )
             else:
-                # Employé en baja ce mois
                 ShiftAssignment.objects.update_or_create(
                     employee=emp, year=year, month=month,
                     defaults={'shift': 'BJ', 'is_manual': False},
                 )
                 assignments[emp.id] = 'BJ'
 
-        # prev_shifts — garder le dernier shift non-BJ connu
+        # prev_shifts — garder le dernier shift réel connu (non BJ)
         new_prev = {}
         for emp in active_employees:
             shift = assignments.get(emp.id)
@@ -239,12 +251,10 @@ def generate_schedule_acondicionamiento(year, start_month=1):
 
     tn_counts = {emp.id: 0 for emp in tn_eligible}
 
-    prev_year  = year - 1 if start_month == 1 else year
-    prev_month = 12       if start_month == 1 else start_month - 1
-    prev_shifts = {
-        emp.id: get_previous_shift(emp, prev_year, prev_month)
-        for emp in active_employees
-    }
+    # Initialiser prev_shifts avec le dernier shift réel (non BJ)
+    prev_shifts = {}
+    for emp in active_employees:
+        prev_shifts[emp.id] = get_last_real_shift(emp, year, start_month)
 
     free_order = free_emps[:]
     random.shuffle(free_order)
@@ -256,8 +266,8 @@ def generate_schedule_acondicionamiento(year, start_month=1):
             e for e in active_employees
             if not is_employee_en_baja_for_month(e, year, month)
         ]
-        fixed_this_month = [e for e in fixed_emps  if e in active_this_month]
-        free_this_month  = [e for e in free_order   if e in active_this_month]
+        fixed_this_month = [e for e in fixed_emps if e in active_this_month]
+        free_this_month  = [e for e in free_order  if e in active_this_month]
 
         for emp in fixed_this_month:
             assignments[emp.id] = emp.allowed_shifts()[0]
@@ -308,24 +318,25 @@ def generate_schedule_acondicionamiento(year, start_month=1):
         random.shuffle(can_choose)
         tm_count = tt_count = 0
 
+        # must_change : forcer l'alternance sans condition de quota
         for emp, forced_shift in must_change:
-            if forced_shift == 'TM' and tm_count < n_tm_need:
-                assignments[emp.id] = 'TM'; tm_count += 1
-            elif forced_shift == 'TT' and tt_count < n_tt_need:
-                assignments[emp.id] = 'TT'; tt_count += 1
-            elif forced_shift == 'TM' and 'TT' in emp.allowed_shifts():
-                assignments[emp.id] = 'TT'; tt_count += 1
-            elif forced_shift == 'TT' and 'TM' in emp.allowed_shifts():
-                assignments[emp.id] = 'TM'; tm_count += 1
-            else:
-                assignments[emp.id] = forced_shift
+            assignments[emp.id] = forced_shift
+            if forced_shift == 'TM':
+                tm_count += 1
+            elif forced_shift == 'TT':
+                tt_count += 1
 
+        # can_choose : remplir avec les quotas restants
         for emp in can_choose:
             allowed = emp.allowed_shifts()
             non_tn  = [s for s in allowed if s != 'TN']
             if tm_count < n_tm_need and 'TM' in non_tn:
                 assignments[emp.id] = 'TM'; tm_count += 1
             elif tt_count < n_tt_need and 'TT' in non_tn:
+                assignments[emp.id] = 'TT'; tt_count += 1
+            elif 'TM' in non_tn:
+                assignments[emp.id] = 'TM'; tm_count += 1
+            elif 'TT' in non_tn:
                 assignments[emp.id] = 'TT'; tt_count += 1
             else:
                 assignments[emp.id] = non_tn[0] if non_tn else allowed[0]
@@ -350,7 +361,7 @@ def generate_schedule_acondicionamiento(year, start_month=1):
                 )
                 assignments[emp.id] = 'BJ'
 
-        # prev_shifts — garder le dernier shift non-BJ connu
+        # prev_shifts — garder le dernier shift réel connu (non BJ)
         new_prev = {}
         for emp in active_employees:
             shift = assignments.get(emp.id)
